@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>محاسبة التجارة — Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg:#0A0E1A;--surface:#111827;--card:#1A2235;--border:#1E2D45;
+  --accent:#3B82F6;--green:#10B981;--red:#EF4444;--gold:#F59E0B;
+  --text:#F1F5F9;--muted:#64748B;--input-bg:#0F1929;--radius:14px;--tab-h:60px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Cairo',sans-serif;overflow:hidden;}
+
+#loading-screen{display:flex;align-items:center;justify-content:center;height:100dvh;flex-direction:column;gap:14px;}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+#auth-screen{display:none;flex-direction:column;align-items:center;justify-content:center;height:100dvh;padding:30px 24px;}
+#auth-screen .logo{font-size:48px;margin-bottom:10px;}
+#auth-screen h1{font-size:24px;font-weight:900;margin-bottom:4px;}
+#auth-screen h1 span{color:var(--accent);}
+#auth-screen .sub{font-size:13px;color:var(--muted);margin-bottom:32px;font-family:'Tajawal',sans-serif;text-align:center;}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;width:100%;max-width:400px;}
+.auth-tabs{display:flex;gap:0;margin-bottom:20px;background:var(--input-bg);border-radius:10px;padding:4px;}
+.auth-tab{flex:1;padding:8px;text-align:center;font-size:13px;font-weight:700;border-radius:8px;cursor:pointer;transition:background .2s,color .2s;color:var(--muted);border:none;background:none;font-family:'Cairo',sans-serif;}
+.auth-tab.active{background:var(--accent);color:#fff;}
+.auth-error{background:rgba(239,68,68,.15);color:var(--red);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:12px;display:none;font-family:'Tajawal',sans-serif;}
+.auth-error.show{display:block;}
+
+#app{display:none;flex-direction:column;height:100dvh;max-width:480px;margin:0 auto;position:relative;}
+#app.visible{display:flex;}
+#header{padding:14px 18px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;justify-content:space-between;align-items:center;}
+#header-left h1{font-size:18px;font-weight:900;}
+#header-left h1 span{color:var(--accent);}
+#header-left .sub{font-size:11px;color:var(--muted);margin-top:2px;font-family:'Tajawal',sans-serif;}
+#header-right{display:flex;align-items:center;gap:8px;}
+#user-email{font-size:10px;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.btn-logout{background:rgba(239,68,68,.15);color:var(--red);border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;}
+.sync-dot.loading{background:var(--gold);animation:pulse .8s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+#content{flex:1;overflow-y:auto;padding:14px 14px 80px;}
+#content::-webkit-scrollbar{display:none;}
+
+#tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tab-h);background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:100;}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;color:var(--muted);cursor:pointer;transition:color .2s;border:none;background:none;font-family:'Cairo',sans-serif;}
+.tab.active{color:var(--accent);}
+.tab svg{width:22px;height:22px;}
+.tab-indicator{position:absolute;top:0;height:2px;background:var(--accent);transition:right .3s cubic-bezier(.4,0,.2,1);border-radius:0 0 3px 3px;}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;}
+.card-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.card-title .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 12px;}
+.kpi .label{font-size:10px;color:var(--muted);margin-bottom:6px;font-family:'Tajawal',sans-serif;}
+.kpi .value{font-size:22px;font-weight:900;line-height:1;}
+.kpi .value.green{color:var(--green);}.kpi .value.red{color:var(--red);}.kpi .value.gold{color:var(--gold);}.kpi .value.blue{color:var(--accent);}
+
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-family:'Tajawal',sans-serif;}
+.field input,.field select{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:15px;font-family:'Cairo',sans-serif;outline:none;transition:border-color .2s;}
+.field input:focus,.field select:focus{border-color:var(--accent);}
+.field input[type=number]{-moz-appearance:textfield;}
+.field input[type=number]::-webkit-outer-spin-button,.field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+
+.btn{width:100%;padding:13px;border-radius:var(--radius);border:none;font-size:15px;font-weight:700;font-family:'Cairo',sans-serif;cursor:pointer;transition:opacity .15s,transform .1s;}
+.btn:active{transform:scale(.97);opacity:.85;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-green{background:var(--green);color:#fff;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-red{background:var(--red);color:#fff;}
+.btn-sm{padding:8px 14px;font-size:12px;width:auto;border-radius:8px;}
+
+.product-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:13px;display:flex;justify-content:space-between;align-items:center;}
+.product-card .info .name{font-size:14px;font-weight:700;}
+.product-card .info .details{font-size:11px;color:var(--muted);margin-top:3px;font-family:'Tajawal',sans-serif;}
+.product-card .margin{text-align:left;}
+.product-card .margin .val{font-size:16px;font-weight:900;}
+.product-card .margin .lbl{font-size:10px;color:var(--muted);}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;}
+.badge-green{background:rgba(16,185,129,.15);color:var(--green);}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red);}
+
+.day-entry{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:13px;margin-bottom:10px;}
+.day-entry .date-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.day-entry .date{font-size:13px;font-weight:700;}
+.day-entry .profit{font-size:16px;font-weight:900;}
+.day-entry .products-mini{display:flex;flex-direction:column;gap:6px;}
+.day-entry .prod-row{display:flex;justify-content:space-between;font-size:12px;}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .25s;}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px 18px 34px;width:100%;max-height:90dvh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);}
+.modal-overlay.open .modal{transform:translateY(0);}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+.modal-title{font-size:17px;font-weight:900;margin-bottom:18px;}
+.modal::-webkit-scrollbar{display:none;}
+
+.summary-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.summary-row:last-child{border-bottom:none;}
+.summary-row .lbl{color:var(--muted);}
+.summary-row .val{font-weight:700;}
+.summary-row.total{padding-top:14px;font-size:15px;}
+.summary-row.total .val{color:var(--green);font-size:18px;}
+
+.page{display:none;}.page.active{display:block;}
+.section-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin:16px 0 10px;font-family:'Tajawal',sans-serif;}
+.divider{height:1px;background:var(--border);margin:14px 0;}
+.color-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.empty{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty .icon{font-size:40px;margin-bottom:10px;}
+.empty p{font-size:13px;line-height:1.6;}
+
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--green);color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;font-weight:700;z-index:999;transition:transform .3s;white-space:nowrap;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+#toast.error{background:var(--red);}
+
+.p-colors{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+.p-color{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .15s;}
+.p-color.selected{border-color:#fff;}
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--muted);font-family:'Tajawal',sans-serif">جاري التحميل...</div>
+</div>
+
+<div id="auth-screen">
+  <div class="logo">🛒</div>
+  <h1><span>Tracker</span> — محاسبة التجارة</h1>
+  <p class="sub">سجّل دخولك لمزامنة بياناتك<br>على كل أجهزتك</p>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">دخول</button>
+      <button class="auth-tab" onclick="switchAuthTab('signup')">حساب جديد</button>
+    </div>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="field"><label>البريد الإلكتروني</label><input type="email" id="auth-email" placeholder="example@gmail.com"></div>
+    <div class="field"><label>كلمة السر</label><input type="password" id="auth-password" placeholder="••••••••"></div>
+    <button class="btn btn-primary" id="auth-btn" onclick="handleAuth()">🔑 دخول</button>
+    <div id="signup-note" style="display:none;margin-top:12px;font-size:11px;color:var(--muted);text-align:center;font-family:'Tajawal',sans-serif">
+      ستصلك رسالة تأكيد على بريدك الإلكتروني
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="header">
+    <div id="header-left">
+      <h1>🛒 <span>Tracker</span></h1>
+      <div class="sub" id="header-date"></div>
+    </div>
+    <div id="header-right">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="user-email"></span>
+      <button class="btn-logout" onclick="handleLogout()">خروج</button>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="page active" id="page-home">
+      <div class="kpi-grid">
+        <div class="kpi"><div class="label">إيراد اليوم</div><div class="value blue" id="kpi-rev">—</div></div>
+        <div class="kpi"><div class="label">ربح اليوم</div><div class="value green" id="kpi-profit">—</div></div>
+        <div class="kpi"><div class="label">مبيعات اليوم</div><div class="value gold" id="kpi-sales">—</div></div>
+        <div class="kpi"><div class="label">هامش %</div><div class="value" id="kpi-margin">—</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><div class="dot"></div>ربح الشهر الحالي</div>
+        <div style="font-size:28px;font-weight:900;color:var(--green)" id="monthly-profit">0 DA</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" id="monthly-sales">0 مبيعة هذا الشهر</div>
+      </div>
+      <div class="section-label">آخر الإدخالات</div>
+      <div id="recent-entries"><div class="empty"><div class="icon">📋</div><p>لا توجد إدخالات بعد</p></div></div>
+      <button class="btn btn-primary" onclick="openDailyModal()" style="margin-top:10px">➕ تسجيل مبيعات اليوم</button>
+    </div>
+
+    <div class="page" id="page-products">
+      <div id="products-list"><div class="empty"><div class="icon">📦</div><p>لا توجد منتجات<br>أضف منتجك الأول</p></div></div>
+      <button class="btn btn-primary" onclick="openProductModal()" style="margin-top:10px">➕ إضافة منتج جديد</button>
+    </div>
+
+    <div class="page" id="page-log">
+      <div id="log-list"><div class="empty"><div class="icon">📅</div><p>لا توجد إدخالات يومية بعد</p></div></div>
+    </div>
+
+    <div class="page" id="page-summary">
+      <div class="section-label">📅 حصيلة أسبوعية</div>
+      <div class="card" id="weekly-summary"></div>
+      <div class="section-label">📈 حصيلة شهرية</div>
+      <div class="card" id="monthly-summary"></div>
+      <div class="section-label">🏆 أداء المنتجات</div>
+      <div id="product-performance"></div>
+    </div>
+  </div>
+
+  <div id="tabs">
+    <div class="tab-indicator" id="tab-indicator" style="width:25%;right:75%"></div>
+    <button class="tab active" onclick="switchTab(0)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      الرئيسية
+    </button>
+    <button class="tab" onclick="switchTab(1)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      المنتجات
+    </button>
+    <button class="tab" onclick="switchTab(2)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      السجل
+    </button>
+    <button class="tab" onclick="switchTab(3)">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      الحصائل
+    </button>
+  </div>
+</div>
+
+<!-- Modal Product -->
+<div class="modal-overlay" id="modal-product">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="product-modal-title">➕ منتج جديد</div>
+    <input type="hidden" id="edit-product-id">
+    <div class="field"><label>اسم المنتج *</label><input type="text" id="p-name" placeholder="مثال: ثوب رجالي أزرق"></div>
+    <div class="field"><label>سعر الشراء (DA) *</label><input type="number" id="p-purchase" placeholder="0" min="0"></div>
+    <div class="field"><label>سعر البيع (DA) *</label><input type="number" id="p-sell" placeholder="0" min="0"></div>
+    <div class="field"><label>تغليف (DA)</label><input type="number" id="p-pkg" placeholder="50" min="0"></div>
+    <div class="field"><label>Ads افتراضي / يوم (DA)</label><input type="number" id="p-ads" placeholder="0" min="0"></div>
+    <div class="field"><label>لون المنتج</label>
+      <div class="p-colors">
+        <div class="p-color selected" style="background:#3B82F6" data-color="#3B82F6" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#10B981" data-color="#10B981" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#F59E0B" data-color="#F59E0B" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#EF4444" data-color="#EF4444" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#8B5CF6" data-color="#8B5CF6" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#EC4899" data-color="#EC4899" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#06B6D4" data-color="#06B6D4" onclick="selectColor(this)"></div>
+        <div class="p-color" style="background:#84CC16" data-color="#84CC16" onclick="selectColor(this)"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-green" id="save-product-btn" onclick="saveProduct()">💾 حفظ</button>
+      <button class="btn btn-ghost btn-sm" style="width:auto;padding:13px 20px" onclick="closeModal('modal-product')">إلغاء</button>
+    </div>
+    <div id="product-margin-preview" style="display:none;margin-top:14px" class="card">
+      <div class="card-title"><div class="dot" style="background:var(--green)"></div>معاينة الهامش</div>
+      <div id="margin-preview-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Daily -->
+<div class="modal-overlay" id="modal-daily">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📅 تسجيل مبيعات</div>
+    <div class="field"><label>التاريخ</label><input type="date" id="d-date"></div>
+    <div class="field"><label>Ads مشتركة اليوم (DA)</label><input type="number" id="d-shared-ads" placeholder="0" min="0"></div>
+    <div class="field"><label>مصاريف مشتركة أخرى (DA)</label><input type="number" id="d-shared-costs" placeholder="0" min="0"></div>
+    <div class="divider"></div>
+    <div id="daily-products-inputs"></div>
+    <button class="btn btn-green" id="save-entry-btn" onclick="saveDailyEntry()" style="margin-top:14px">💾 حفظ اليوم</button>
+    <div id="daily-preview" style="margin-top:14px;display:none" class="card">
+      <div class="card-title"><div class="dot" style="background:var(--gold)"></div>معاينة اليوم</div>
+      <div id="daily-preview-content"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://crhholubtqrmapyyqouj.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_10Sj3yqR-Ke3L-NyYpKm7w_EOP9nGlV';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let state = { products: [], entries: [] };
+let currentUser = null;
+let authMode = 'login';
+
+// ── INIT ──
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { currentUser = session.user; await loadData(); showApp(); }
+  else showAuth();
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN') { currentUser = session.user; await loadData(); showApp(); }
+    else if (event === 'SIGNED_OUT') { currentUser = null; state = { products:[], entries:[] }; showAuth(); }
+  });
+}
+
+function showApp() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('user-email').textContent = currentUser.email;
+  document.getElementById('header-date').textContent =
+    new Date().toLocaleDateString('ar-DZ',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  renderHome();
+}
+function showAuth() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ── AUTH ──
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.querySelectorAll('.auth-tab').forEach((t,i) =>
+    t.classList.toggle('active', (mode==='login'&&i===0)||(mode==='signup'&&i===1)));
+  document.getElementById('auth-btn').textContent = mode==='login' ? '🔑 دخول' : '✨ إنشاء حساب';
+  document.getElementById('signup-note').style.display = mode==='signup' ? 'block' : 'none';
+  document.getElementById('auth-error').classList.remove('show');
+}
+
+async function handleAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-password').value;
+  if(!email||!pass){showAuthError('أدخل البريد وكلمة السر');return;}
+  const btn = document.getElementById('auth-btn');
+  btn.disabled = true; btn.textContent = '...';
+  let error;
+  if(authMode==='login') {
+    ({error} = await sb.auth.signInWithPassword({email, password:pass}));
+  } else {
+    ({error} = await sb.auth.signUp({email, password:pass}));
+    if(!error){showAuthError('✅ تم! تحقق من بريدك للتأكيد');btn.disabled=false;btn.textContent='✨ إنشاء حساب';return;}
+  }
+  if(error){
+    const msg = error.message.includes('Invalid')||error.message.includes('credentials') ? 'بريد أو كلمة سر غلط'
+              : error.message.includes('already') ? 'هذا البريد مسجل مسبقاً'
+              : error.message.includes('confirm') ? 'تحقق من بريدك أولاً'
+              : error.message;
+    showAuthError(msg);
+  }
+  btn.disabled=false;
+  btn.textContent = authMode==='login'?'🔑 دخول':'✨ إنشاء حساب';
+}
+function showAuthError(msg){const el=document.getElementById('auth-error');el.textContent=msg;el.classList.add('show');}
+async function handleLogout(){await sb.auth.signOut();}
+
+// ── SYNC ──
+function setSyncing(on){document.getElementById('sync-dot').className='sync-dot'+(on?' loading':'');}
+
+// ── DATA ──
+async function loadData() {
+  setSyncing(true);
+  const uid = currentUser.id;
+  try {
+    const [{data:prods},{data:entries},{data:ep}] = await Promise.all([
+      sb.from('products').select('*').eq('user_id',uid).order('created_at'),
+      sb.from('daily_entries').select('*').eq('user_id',uid).order('date',{ascending:false}),
+      sb.from('entry_products').select('*,daily_entries!inner(user_id)').eq('daily_entries.user_id',uid)
+    ]);
+    state.products = (prods||[]).map(p=>({
+      id:p.id,name:p.name,purchase:+p.purchase_price,sell:+p.sell_price,pkg:+p.packaging,ads:+p.ads_default,color:p.color
+    }));
+    state.entries = (entries||[]).map(e=>({
+      id:e.id,date:e.date,sharedAds:+e.shared_ads,sharedCosts:+e.shared_costs,
+      products:(ep||[]).filter(x=>x.entry_id===e.id).map(x=>({pid:x.product_id,gross:x.gross_sales,returns:x.returns,ads:x.ads}))
+    }));
+  } catch(e){console.error(e);}
+  setSyncing(false);
+}
+
+async function dbSaveProduct(p,isEdit){
+  setSyncing(true);
+  const row={id:p.id,user_id:currentUser.id,name:p.name,purchase_price:p.purchase,sell_price:p.sell,packaging:p.pkg,ads_default:p.ads,color:p.color};
+  if(isEdit) await sb.from('products').update(row).eq('id',p.id);
+  else await sb.from('products').insert(row);
+  setSyncing(false);
+}
+async function dbDeleteProduct(id){setSyncing(true);await sb.from('products').delete().eq('id',id);setSyncing(false);}
+async function dbSaveEntry(entry){
+  setSyncing(true);
+  await sb.from('daily_entries').upsert({id:entry.id,user_id:currentUser.id,date:entry.date,shared_ads:entry.sharedAds,shared_costs:entry.sharedCosts});
+  await sb.from('entry_products').delete().eq('entry_id',entry.id);
+  const rows=entry.products.map(ep=>({entry_id:entry.id,product_id:ep.pid,gross_sales:ep.gross,returns:ep.returns,ads:ep.ads??null}));
+  if(rows.length) await sb.from('entry_products').insert(rows);
+  setSyncing(false);
+}
+async function dbDeleteEntry(id){setSyncing(true);await sb.from('daily_entries').delete().eq('id',id);setSyncing(false);}
+
+// ── UTILS ──
+function fmt(n){if(isNaN(n)||n==null)return'—';return Math.round(n).toLocaleString('ar-DZ')+' DA';}
+function fmtN(n){return Math.round(n).toLocaleString('ar-DZ');}
+function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function today(){return new Date().toISOString().slice(0,10);}
+function showToast(msg,err=false){
+  const t=document.getElementById('toast');t.textContent=msg;t.className='show'+(err?' error':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.className='',2500);
+}
+
+// ── CALC ──
+function calcEntry(e){
+  let rev=0,cost=0,sales=0,rets=0;
+  for(const ep of e.products){
+    const p=state.products.find(x=>x.id===ep.pid);if(!p)continue;
+    const net=ep.gross-ep.returns,ads=ep.ads??p.ads??0;
+    rev+=net*p.sell;cost+=net*(p.purchase+p.pkg)+ads;sales+=ep.gross;rets+=ep.returns;
+  }
+  cost+=(e.sharedAds||0)+(e.sharedCosts||0);
+  return{revenue:rev,costs:cost,profit:rev-cost,sales,rets};
+}
+function calcProduct(pid){
+  let rev=0,cost=0,sales=0,rets=0;
+  for(const e of state.entries){
+    const ep=e.products.find(x=>x.pid===pid);if(!ep)continue;
+    const p=state.products.find(x=>x.id===pid);if(!p)continue;
+    const net=ep.gross-ep.returns,ads=ep.ads??p.ads??0;
+    rev+=net*p.sell;cost+=net*(p.purchase+p.pkg)+ads;sales+=ep.gross;rets+=ep.returns;
+  }
+  return{revenue:rev,costs:cost,profit:rev-cost,sales,rets};
+}
+function getMonthEntries(y,m){return state.entries.filter(e=>{const d=new Date(e.date);return d.getFullYear()===y&&d.getMonth()===m;});}
+function getWeekEntries(){
+  const now=new Date(),day=now.getDay(),mon=new Date(now);
+  mon.setDate(now.getDate()-((day+6)%7));mon.setHours(0,0,0,0);
+  return state.entries.filter(e=>new Date(e.date)>=mon);
+}
+
+// ── TABS ──
+let currentTab=0;
+function switchTab(i){
+  document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',j===i));
+  const ind=document.getElementById('tab-indicator');
+  ind.style.width='25%';ind.style.right=(75-i*25)+'%';currentTab=i;
+  if(i===0)renderHome();if(i===1)renderProducts();if(i===2)renderLog();if(i===3)renderSummary();
+}
+
+// ── HOME ──
+function renderHome(){
+  const te=state.entries.find(e=>e.date===today());
+  if(te){
+    const c=calcEntry(te);
+    document.getElementById('kpi-rev').textContent=fmt(c.revenue);
+    document.getElementById('kpi-profit').textContent=fmt(c.profit);
+    document.getElementById('kpi-profit').className='value '+(c.profit>=0?'green':'red');
+    document.getElementById('kpi-sales').textContent=fmtN(c.sales);
+    const m=c.revenue>0?(c.profit/c.revenue*100):0;
+    document.getElementById('kpi-margin').textContent=m.toFixed(1)+'%';
+    document.getElementById('kpi-margin').className='value '+(m>=0?'green':'red');
+  } else {
+    ['kpi-rev','kpi-profit','kpi-sales','kpi-margin'].forEach(id=>{document.getElementById(id).textContent='—';document.getElementById(id).className='value blue';});
+  }
+  const now=new Date(),mE=getMonthEntries(now.getFullYear(),now.getMonth());
+  let mP=0,mS=0;for(const e of mE){const c=calcEntry(e);mP+=c.profit;mS+=c.sales;}
+  document.getElementById('monthly-profit').textContent=fmt(mP);
+  document.getElementById('monthly-profit').style.color=mP>=0?'var(--green)':'var(--red)';
+  document.getElementById('monthly-sales').textContent=fmtN(mS)+' مبيعة هذا الشهر';
+  const cont=document.getElementById('recent-entries');
+  const rec=[...state.entries].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  if(!rec.length){cont.innerHTML='<div class="empty"><div class="icon">📋</div><p>لا توجد إدخالات بعد</p></div>';return;}
+  cont.innerHTML=rec.map(e=>{
+    const c=calcEntry(e),d=new Date(e.date);
+    const ds=d.toLocaleDateString('ar-DZ',{weekday:'short',day:'numeric',month:'short'});
+    const prods=e.products.filter(ep=>ep.gross>0).map(ep=>{
+      const p=state.products.find(x=>x.id===ep.pid);if(!p)return'';
+      return`<div class="prod-row"><span style="color:${p.color}">${p.name}</span><span>${fmtN(ep.gross-ep.returns)} وحدة</span></div>`;
+    }).join('');
+    return`<div class="day-entry">
+      <div class="date-row"><div class="date">${ds}</div><div class="profit" style="color:${c.profit>=0?'var(--green)':'var(--red)'}">${fmt(c.profit)}</div></div>
+      <div class="products-mini">${prods||'<span style="color:var(--muted);font-size:12px">لا مبيعات</span>'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── PRODUCTS ──
+function renderProducts(){
+  const cont=document.getElementById('products-list');
+  if(!state.products.length){cont.innerHTML='<div class="empty"><div class="icon">📦</div><p>لا توجد منتجات<br>أضف منتجك الأول</p></div>';return;}
+  cont.innerHTML=state.products.map(p=>{
+    const m=p.sell-p.purchase-p.pkg,mp=p.sell>0?(m/p.sell*100):0,pos=m>=0;
+    return`<div class="product-card">
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
+        <div class="color-dot" style="background:${p.color}"></div>
+        <div class="info">
+          <div class="name">${p.name}</div>
+          <div class="details">شراء: ${fmt(p.purchase)} | بيع: ${fmt(p.sell)} | تغليف: ${fmt(p.pkg)}</div>
+          <div class="details" style="margin-top:3px">Ads: ${fmt(p.ads)}/يوم</div>
+        </div>
+      </div>
+      <div class="margin"><div class="val" style="color:${pos?'var(--green)':'var(--red)'}">${fmt(m)}</div><div class="lbl">هامش/وحدة</div>
+        <div style="margin-top:4px"><span class="badge ${pos?'badge-green':'badge-red'}">${mp.toFixed(0)}%</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:-4px;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="editProduct('${p.id}')">✏️ تعديل</button>
+      <button class="btn btn-red btn-sm" onclick="deleteProduct('${p.id}')">🗑️ حذف</button>
+    </div>`;
+  }).join('');
+}
+
+function openProductModal(id=null){
+  document.getElementById('edit-product-id').value=id||'';
+  if(id){
+    const p=state.products.find(x=>x.id===id);if(!p)return;
+    document.getElementById('product-modal-title').textContent='✏️ تعديل المنتج';
+    document.getElementById('p-name').value=p.name;
+    document.getElementById('p-purchase').value=p.purchase;
+    document.getElementById('p-sell').value=p.sell;
+    document.getElementById('p-pkg').value=p.pkg;
+    document.getElementById('p-ads').value=p.ads;
+    document.querySelectorAll('.p-color').forEach(el=>el.classList.toggle('selected',el.dataset.color===p.color));
+  } else {
+    document.getElementById('product-modal-title').textContent='➕ منتج جديد';
+    ['p-name','p-purchase','p-sell','p-pkg','p-ads'].forEach(id=>document.getElementById(id).value='');
+    document.querySelectorAll('.p-color').forEach((el,i)=>el.classList.toggle('selected',i===0));
+  }
+  document.getElementById('product-margin-preview').style.display='none';
+  openModal('modal-product');
+  ['p-purchase','p-sell','p-pkg','p-ads'].forEach(id=>document.getElementById(id).oninput=updateMarginPreview);
+}
+
+function updateMarginPreview(){
+  const sell=+document.getElementById('p-sell').value||0,pur=+document.getElementById('p-purchase').value||0;
+  const pkg=+document.getElementById('p-pkg').value||0,ads=+document.getElementById('p-ads').value||0;
+  if(!sell&&!pur)return;
+  const fixed=pur+pkg,margin=sell-fixed,ma=margin-ads;
+  document.getElementById('product-margin-preview').style.display='block';
+  document.getElementById('margin-preview-content').innerHTML=`
+    <div class="summary-row"><span class="lbl">تكاليف ثابتة/وحدة</span><span class="val">${fmt(fixed)}</span></div>
+    <div class="summary-row"><span class="lbl">هامش قبل Ads</span><span class="val" style="color:${margin>=0?'var(--green)':'var(--red)'}">${fmt(margin)}</span></div>
+    <div class="summary-row"><span class="lbl">هامش بعد Ads</span><span class="val" style="color:${ma>=0?'var(--green)':'var(--red)'}">${fmt(ma)}</span></div>
+  `;
+}
+
+function selectColor(el){document.querySelectorAll('.p-color').forEach(e=>e.classList.remove('selected'));el.classList.add('selected');}
+
+async function saveProduct(){
+  const name=document.getElementById('p-name').value.trim();
+  const sell=+document.getElementById('p-sell').value,pur=+document.getElementById('p-purchase').value;
+  if(!name){showToast('أدخل اسم المنتج',true);return;}
+  if(!sell){showToast('أدخل سعر البيع',true);return;}
+  const color=document.querySelector('.p-color.selected')?.dataset.color||'#3B82F6';
+  const pkg=+document.getElementById('p-pkg').value||0,ads=+document.getElementById('p-ads').value||0;
+  const editId=document.getElementById('edit-product-id').value;
+  const btn=document.getElementById('save-product-btn');btn.disabled=true;
+  if(editId){
+    const p=state.products.find(x=>x.id===editId);
+    if(p){p.name=name;p.purchase=pur;p.sell=sell;p.pkg=pkg;p.ads=ads;p.color=color;}
+    await dbSaveProduct(p,true);
+  } else {
+    const p={id:uid(),name,purchase:pur,sell,pkg,ads,color};
+    state.products.push(p);await dbSaveProduct(p,false);
+  }
+  btn.disabled=false;closeModal('modal-product');renderProducts();
+  showToast(editId?'✅ تم تعديل المنتج':'✅ تم إضافة المنتج');
+}
+
+function editProduct(id){openProductModal(id);}
+async function deleteProduct(id){
+  if(!confirm('حذف هذا المنتج؟'))return;
+  state.products=state.products.filter(p=>p.id!==id);
+  await dbDeleteProduct(id);renderProducts();showToast('🗑️ تم الحذف');
+}
+
+// ── DAILY ──
+function openDailyModal(){
+  if(!state.products.length){showToast('أضف منتجاً أولاً',true);return;}
+  document.getElementById('d-date').value=today();
+  document.getElementById('d-shared-ads').value='';
+  document.getElementById('d-shared-costs').value='';
+  document.getElementById('daily-products-inputs').innerHTML=state.products.map(p=>`
+    <div class="card" style="border-right:3px solid ${p.color};margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div class="color-dot" style="background:${p.color}"></div>
+        <div style="font-size:14px;font-weight:700">${p.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-right:auto">بيع: ${fmt(p.sell)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="field" style="margin:0"><label>مبيعات</label><input type="number" id="d-gross-${p.id}" placeholder="0" min="0" oninput="updateDailyPreview()"></div>
+        <div class="field" style="margin:0"><label>روتور</label><input type="number" id="d-ret-${p.id}" placeholder="0" min="0" oninput="updateDailyPreview()"></div>
+        <div class="field" style="margin:0"><label>Ads (DA)</label><input type="number" id="d-ads-${p.id}" placeholder="${p.ads||0}" min="0" oninput="updateDailyPreview()"></div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('daily-preview').style.display='none';
+  openModal('modal-daily');
+}
+
+function updateDailyPreview(){
+  let rev=0,cost=0,sales=0;
+  const shA=+document.getElementById('d-shared-ads').value||0,shC=+document.getElementById('d-shared-costs').value||0;
+  for(const p of state.products){
+    const g=+document.getElementById(`d-gross-${p.id}`)?.value||0;
+    const r=+document.getElementById(`d-ret-${p.id}`)?.value||0;
+    const a=+document.getElementById(`d-ads-${p.id}`)?.value||p.ads||0;
+    const net=g-r;rev+=net*p.sell;cost+=net*(p.purchase+p.pkg)+a;sales+=g;
+  }
+  cost+=shA+shC;const profit=rev-cost;
+  if(!sales&&!rev){document.getElementById('daily-preview').style.display='none';return;}
+  document.getElementById('daily-preview').style.display='block';
+  document.getElementById('daily-preview-content').innerHTML=`
+    <div class="summary-row"><span class="lbl">إجمالي المبيعات</span><span class="val">${fmtN(sales)}</span></div>
+    <div class="summary-row"><span class="lbl">إيراد صافي</span><span class="val">${fmt(rev)}</span></div>
+    <div class="summary-row"><span class="lbl">إجمالي التكاليف</span><span class="val" style="color:var(--red)">${fmt(cost)}</span></div>
+    <div class="summary-row total"><span class="lbl">صافي الربح</span><span class="val" style="color:${profit>=0?'var(--green)':'var(--red)'}">${fmt(profit)}</span></div>
+  `;
+}
+
+async function saveDailyEntry(){
+  const dateVal=document.getElementById('d-date').value;
+  if(!dateVal){showToast('اختر التاريخ',true);return;}
+  const products=state.products.map(p=>({
+    pid:p.id,
+    gross:+document.getElementById(`d-gross-${p.id}`)?.value||0,
+    returns:+document.getElementById(`d-ret-${p.id}`)?.value||0,
+    ads:document.getElementById(`d-ads-${p.id}`)?.value!==''?+document.getElementById(`d-ads-${p.id}`).value:p.ads,
+  }));
+  const sharedAds=+document.getElementById('d-shared-ads').value||0;
+  const sharedCosts=+document.getElementById('d-shared-costs').value||0;
+  const btn=document.getElementById('save-entry-btn');btn.disabled=true;
+  const existing=state.entries.find(e=>e.date===dateVal);
+  const entryId=existing?existing.id:uid();
+  state.entries=state.entries.filter(e=>e.date!==dateVal);
+  const entry={id:entryId,date:dateVal,sharedAds,sharedCosts,products};
+  state.entries.push(entry);state.entries.sort((a,b)=>b.date.localeCompare(a.date));
+  await dbSaveEntry(entry);
+  btn.disabled=false;closeModal('modal-daily');renderHome();renderLog();
+  showToast('✅ تم حفظ اليوم');
+}
+
+// ── LOG ──
+function renderLog(){
+  const cont=document.getElementById('log-list');
+  if(!state.entries.length){cont.innerHTML='<div class="empty"><div class="icon">📅</div><p>لا توجد إدخالات يومية بعد</p></div>';return;}
+  cont.innerHTML=state.entries.map(e=>{
+    const c=calcEntry(e),d=new Date(e.date);
+    const ds=d.toLocaleDateString('ar-DZ',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    const prods=e.products.filter(ep=>ep.gross>0||ep.returns>0).map(ep=>{
+      const p=state.products.find(x=>x.id===ep.pid);if(!p)return'';
+      const net=ep.gross-ep.returns,pP=net*p.sell-net*(p.purchase+p.pkg)-(ep.ads??p.ads??0);
+      return`<div class="prod-row">
+        <span style="color:${p.color};font-weight:600">${p.name}</span>
+        <span>${fmtN(ep.gross)}${ep.returns>0?` (-${ep.returns})`:''} <span style="color:${pP>=0?'var(--green)':'var(--red)'}">${fmt(pP)}</span></span>
+      </div>`;
+    }).join('');
+    return`<div class="day-entry">
+      <div class="date-row"><div class="date">${ds}</div><div class="profit" style="color:${c.profit>=0?'var(--green)':'var(--red)'}">${fmt(c.profit)}</div></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">إيراد: ${fmt(c.revenue)} | تكاليف: ${fmt(c.costs)}</div>
+      <div class="products-mini">${prods||'<span style="color:var(--muted);font-size:12px">لا مبيعات</span>'}</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-ghost btn-sm" onclick="reEditEntry('${e.date}')">✏️ تعديل</button>
+        <button class="btn btn-red btn-sm" onclick="deleteEntry('${e.id}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function reEditEntry(date){
+  const e=state.entries.find(x=>x.date===date);if(!e)return;
+  openDailyModal();
+  setTimeout(()=>{
+    document.getElementById('d-date').value=date;
+    document.getElementById('d-shared-ads').value=e.sharedAds||0;
+    document.getElementById('d-shared-costs').value=e.sharedCosts||0;
+    for(const ep of e.products){
+      const g=document.getElementById(`d-gross-${ep.pid}`);
+      const r=document.getElementById(`d-ret-${ep.pid}`);
+      const a=document.getElementById(`d-ads-${ep.pid}`);
+      if(g)g.value=ep.gross||0;if(r)r.value=ep.returns||0;if(a)a.value=ep.ads??'';
+    }
+    updateDailyPreview();
+  },350);
+}
+
+async function deleteEntry(id){
+  if(!confirm('حذف هذا اليوم؟'))return;
+  state.entries=state.entries.filter(e=>e.id!==id);
+  await dbDeleteEntry(id);renderLog();renderHome();showToast('🗑️ تم الحذف');
+}
+
+// ── SUMMARY ──
+function renderSummary(){
+  const wE=getWeekEntries();let wR=0,wC=0,wP=0,wS=0;
+  for(const e of wE){const c=calcEntry(e);wR+=c.revenue;wC+=c.costs;wP+=c.profit;wS+=c.sales;}
+  document.getElementById('weekly-summary').innerHTML=`
+    <div class="card-title"><div class="dot" style="background:var(--accent)"></div>هذا الأسبوع (${wE.length} أيام)</div>
+    <div class="summary-row"><span class="lbl">مبيعات</span><span class="val">${fmtN(wS)}</span></div>
+    <div class="summary-row"><span class="lbl">إيراد</span><span class="val">${fmt(wR)}</span></div>
+    <div class="summary-row"><span class="lbl">تكاليف</span><span class="val" style="color:var(--red)">${fmt(wC)}</span></div>
+    <div class="summary-row total"><span class="lbl">صافي الربح</span><span class="val" style="color:${wP>=0?'var(--green)':'var(--red)'}">${fmt(wP)}</span></div>
+  `;
+  const now=new Date(),mE=getMonthEntries(now.getFullYear(),now.getMonth());
+  let mR=0,mC=0,mP=0,mS=0,mRt=0;
+  for(const e of mE){const c=calcEntry(e);mR+=c.revenue;mC+=c.costs;mP+=c.profit;mS+=c.sales;mRt+=c.rets;}
+  const mM=mR>0?(mP/mR*100):0;
+  document.getElementById('monthly-summary').innerHTML=`
+    <div class="card-title"><div class="dot" style="background:var(--green)"></div>هذا الشهر (${mE.length} يوم)</div>
+    <div class="summary-row"><span class="lbl">مبيعات إجمالية</span><span class="val">${fmtN(mS)}</span></div>
+    <div class="summary-row"><span class="lbl">مرتجعات</span><span class="val" style="color:var(--red)">${fmtN(mRt)}</span></div>
+    <div class="summary-row"><span class="lbl">إيراد صافي</span><span class="val">${fmt(mR)}</span></div>
+    <div class="summary-row"><span class="lbl">تكاليف</span><span class="val" style="color:var(--red)">${fmt(mC)}</span></div>
+    <div class="summary-row"><span class="lbl">هامش الربح</span><span class="val">${mM.toFixed(1)}%</span></div>
+    <div class="summary-row total"><span class="lbl">صافي الربح</span><span class="val" style="color:${mP>=0?'var(--green)':'var(--red)'}">${fmt(mP)}</span></div>
+  `;
+  const pp=document.getElementById('product-performance');
+  if(!state.products.length){pp.innerHTML='<div class="empty"><div class="icon">📦</div><p>لا توجد منتجات</p></div>';return;}
+  pp.innerHTML=state.products.map(p=>{
+    const c=calcProduct(p.id),m=c.revenue>0?(c.profit/c.revenue*100):0;
+    return`<div class="card" style="border-right:3px solid ${p.color}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="color-dot" style="background:${p.color}"></div>
+          <div style="font-size:14px;font-weight:700">${p.name}</div>
+        </div>
+        <span class="badge ${c.profit>=0?'badge-green':'badge-red'}">${m.toFixed(0)}%</span>
+      </div>
+      <div class="summary-row"><span class="lbl">مبيعات</span><span class="val">${fmtN(c.sales)}</span></div>
+      <div class="summary-row"><span class="lbl">مرتجعات</span><span class="val" style="color:var(--red)">${fmtN(c.rets)}</span></div>
+      <div class="summary-row"><span class="lbl">إيراد</span><span class="val">${fmt(c.revenue)}</span></div>
+      <div class="summary-row total"><span class="lbl">الربح</span><span class="val" style="color:${c.profit>=0?'var(--green)':'var(--red)'}">${fmt(c.profit)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ── MODAL ──
+function openModal(id){document.getElementById(id).classList.add('open');document.body.style.overflow='hidden';}
+function closeModal(id){document.getElementById(id).classList.remove('open');document.body.style.overflow='';}
+document.querySelectorAll('.modal-overlay').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)closeModal(el.id);}));
+
+init();
+</script>
+</body>
+</html>
